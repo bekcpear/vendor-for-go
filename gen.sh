@@ -51,7 +51,7 @@ if [[ ${?} != 4 ]]; then
   echo "The command 'getopt' of Linux version is necessory to parse parameters." >&2
   exit 1
 fi
-_ARGS=$(getopt -o 'g:p:x:u::b::Pv' -- "$@")
+_ARGS=$(getopt -o 'g:p:x:u::b::Pyv' -- "$@")
 if [[ ${?} != 0 ]]; then
   _help
   exit 1
@@ -325,12 +325,15 @@ fi
 
 _run_script() {
   echo ">>> run extra script '${1}' ..."
+  if [[ ! -x "${1}" ]]; then
+    _do chmod +x "${1}" || true
+  fi
   (
   export MOD_DIR=${_MOD_DIR}
   export VCS_DIR=${_VCS_DIR}
   set +e
   "${1}"
-  )
+  ) || true
   echo ">>> extra script '${1}' finished."
 }
 
@@ -362,7 +365,7 @@ if [[ $(git log --oneline ./vendor 2>/dev/null | wc -l | cut -d' ' -f1) == 0 ]];
 else
   _commit_msg_prefix="update"
 fi
-if [[ $(git diff --cached ./vendor) == '' ]]; then
+if [[ $(git diff --cached ./vendor | head -1) == '' ]]; then
   echo "no vendor changed, skip git vendor commit."
 else
   _do git commit -m "vendor: ${_commit_msg_prefix} ${_VERSION}"
@@ -374,8 +377,8 @@ else
   _VERSION="v${_VERSION#v}"
 fi
 if [[ $(git tag --list ${_VERSION}) != '' ]]; then
-  if [[ $(git diff ${_VERSION}..HEAD) != '' || \
-        $(git log ${_VERSION}..HEAD) != '' ]]; then
+  if [[ $(git diff ${_VERSION}..HEAD | head -1) != '' || \
+        $(git log ${_VERSION}..HEAD | head -1) != '' ]]; then
     _do git tag -d "${_VERSION}"
     _TAG_UPDATED=1
   else
