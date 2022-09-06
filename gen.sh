@@ -23,9 +23,12 @@ Usage: $(basename $0) [<PKG-DIR> [<PKG-VERSION>]] [<OPTS>...]
                        will be prefixed by the branch name
                        **it conflicts with '-P'**
     -u[<args>]        Auto push to upstream with optional <args> (quote them)
-    -x  <path>        Exec an extra script after vendor generated, before commit
+    -x  <path>        Exec an extra script after vendor generated, before commit 'vendor'
                        MOD_DIR: exported var for PKG dir
                        VCS_DIR: exported var for VCS dir
+                       can be specified multiple times
+                       You need to commit files other than 'vendor' folder in this script
+    -y                The following script specified by '-x' will be executed before vendor generated
     -g  <ver>         Update the go directive to the indicated version
     -v                Verbose output
 
@@ -66,6 +69,10 @@ while :; do
       ;;
     -p)
       shift
+      if [[ ${1} == '' ]]; then
+        echo "wrong value for '-p'" >&2
+        exit 1
+      fi
       _VCS_DIR="$(realpath ${1})"
       shift
       ;;
@@ -95,8 +102,21 @@ while :; do
       ;;
     -x)
       shift
-      _EXTRA_SCRIPT="$(realpath ${1})"
+      if [[ ${1} == '' ]]; then
+        echo "wrong value for '-x'" >&2
+        exit 1
+      fi
+      if [[ -n ${_EARLY_SCRIPT} ]]; then
+        unset _EARLY_SCRIPT
+        _EXTRA_SCRIPT_EARLY+=("$(realpath ${1})")
+      else
+        _EXTRA_SCRIPT+=("$(realpath ${1})")
+      fi
       shift
+      ;;
+    -y)
+      shift
+      _EARLY_SCRIPT=1
       ;;
     -v)
       shift
@@ -181,7 +201,7 @@ if [[ -z ${_VCS_DIR} || \
   if [[ -n ${_VCS_DIR} ]]; then
     echo "the specified VCS dir is intersected with PKG dir, do as VCS path omitted" >&2
   fi
-  unset _VCS_DIR _AUTOGEN _VERSION _USE_BRANCH _PUSH _EXTRA_SCRIPT
+  unset _VCS_DIR _AUTOGEN _VERSION _USE_BRANCH _PUSH _EXTRA_SCRIPT _EXTRA_SCRIPT_EARLY
 else
   _is_dir "${_VCS_DIR}"
 fi
@@ -224,7 +244,7 @@ if [[ -n ${_PUSH} ]]; then
   if [[ -z ${_REMOTE_REPO} ]]; then
     git -C "${_VCS_DIR}" config branch.${_BRANCH_NAME}.remote >${_O_REDIRECT} || \
       {
-        echo "neigher specified remote for branch '${_BRANCH_NAME}', nor default upstream branch" >&2
+        echo "neither specified remote for branch '${_BRANCH_NAME}', nor default upstream branch" >&2
         echo "skip push action!"
         unset _PUSH
       }
@@ -244,11 +264,17 @@ if [[ -n ${_USE_BRANCH} ]]; then
 fi
 echo "  ${_ACT_IDX}. remove '${_VENDOR}' directory"
 _ACT_IDX+=1
+if [[ -n ${_VERSION} ]]; then
+  if [[ -n ${_EXTRA_SCRIPT_EARLY} ]]; then
+    echo "  ${_ACT_IDX}. run '${_EXTRA_SCRIPT_EARLY[@]}'"
+    _ACT_IDX+=1
+  fi
+fi
 echo "  ${_ACT_IDX}. re-generate it"
 _ACT_IDX+=1
 if [[ -n ${_VERSION} ]]; then
   if [[ -n ${_EXTRA_SCRIPT} ]]; then
-    echo "  ${_ACT_IDX}. run '${_EXTRA_SCRIPT}'"
+    echo "  ${_ACT_IDX}. run '${_EXTRA_SCRIPT[@]}'"
     _ACT_IDX+=1
   fi
   echo "  ${_ACT_IDX}. make/update tag with version '${_VERSION}'"
@@ -297,6 +323,23 @@ if [[ -n ${_USE_BRANCH} ]]; then
   _do popd
 fi
 
+_run_script() {
+  echo ">>> run extra script '${1}' ..."
+  (
+  export MOD_DIR=${_MOD_DIR}
+  export VCS_DIR=${_VCS_DIR}
+  set +e
+  "${1}"
+  )
+  echo ">>> extra script '${1}' finished."
+}
+
+if [[ -n ${_EXTRA_SCRIPT_EARLY} ]]; then
+  for _script in "${_EXTRA_SCRIPT_EARLY[@]}"; do
+    _run_script "${_script}"
+  done
+fi
+
 # mod actions
 _do go mod verify
 _do go mod tidy ${_VERBOSE:+-v} ${_GO_VER:+-go} ${_GO_VER}
@@ -305,14 +348,9 @@ _do go mod tidy ${_VERBOSE:+-v} ${_GO_VER:+-go} ${_GO_VER}
 _do go mod vendor ${_VERBOSE:+-v} ${_VCS_DIR:+-o} ${_VCS_DIR:+${_VENDOR}}
 
 if [[ -n ${_EXTRA_SCRIPT} ]]; then
-  echo ">>> run extra script '${_EXTRA_SCRIPT}' ..."
-  (
-  export MOD_DIR=${_MOD_DIR}
-  export VCS_DIR=${_VCS_DIR}
-  set +e
-  "${_EXTRA_SCRIPT}"
-  )
-  echo ">>> extra script '${_EXTRA_SCRIPT}' finished."
+  for _script in "${_EXTRA_SCRIPT[@]}"; do
+    _run_script "${_script}"
+  done
 fi
 
 [[ -n ${_VERSION} ]] || exit 0
@@ -325,20 +363,31 @@ else
   _commit_msg_prefix="update"
 fi
 if [[ $(git diff --cached ./vendor) == '' ]]; then
-  echo "no changed, skip git commit and following actions."
-  exit 1
+  echo "no vendor changed, skip git vendor commit."
+else
+  _do git commit -m "vendor: ${_commit_msg_prefix} ${_VERSION}"
 fi
-_do git commit -m "vendor: ${_commit_msg_prefix} ${_VERSION}"
+
 if [[ -n ${_BRANCH_NAME} ]]; then
   _VERSION="vendor-${_BRANCH_NAME}-${_VERSION}"
 else
   _VERSION="v${_VERSION#v}"
 fi
 if [[ $(git tag --list ${_VERSION}) != '' ]]; then
-  _do git tag -d "${_VERSION}"
+  if [[ $(git diff ${_VERSION}..HEAD) != '' || \
+        $(git log ${_VERSION}..HEAD) != '' ]]; then
+    _do git tag -d "${_VERSION}"
+    _TAG_UPDATED=1
+  else
+    echo "Tag '${_VERSION}' exists, and no further updates, skip following actions."
+    exit 1
+  fi
 fi
 _do git tag -a "${_VERSION}" -m "${_VERSION}"
 
 [[ -n ${_PUSH} ]] || exit 0
 
 _do git push ${_PUSH_ARGS} ${_REMOTE_REPO} ${_REMOTE_REF}
+if [[ -n ${_TAG_UPDATED} ]]; then
+  _do git push ${_PUSH_ARGS} --tags --force ${_REMOTE_REPO} ${_REMOTE_REF}
+fi
