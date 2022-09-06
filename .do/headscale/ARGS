@@ -1,0 +1,1 @@
+-x %MYDIR%/generate-proto.sh -u"--force -n"

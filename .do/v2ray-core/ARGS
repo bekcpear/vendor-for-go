@@ -1,0 +1,1 @@
+-y -x %MYDIR%/update-quic-go.sh -x %MYDIR%/copy-mod-sum.sh -g 1.19
