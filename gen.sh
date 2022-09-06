@@ -270,7 +270,11 @@ if [[ -n ${_VERSION} ]]; then
     _ACT_IDX+=1
   fi
 fi
-echo "  ${_ACT_IDX}. re-generate it"
+echo "  ${_ACT_IDX}. do go mod tidy"
+_ACT_IDX+=1
+echo "  ${_ACT_IDX}. re-generate vendor"
+_ACT_IDX+=1
+echo "  ${_ACT_IDX}. make diff patch for go.mod and go.sum"
 _ACT_IDX+=1
 if [[ -n ${_VERSION} ]]; then
   if [[ -n ${_EXTRA_SCRIPT} ]]; then
@@ -337,6 +341,31 @@ _run_script() {
   echo ">>> extra script '${1}' finished."
 }
 
+# $1: path related to repo path
+# $2: repo path
+_git_commit() {
+  _do git ${2:+-C} ${2} add ${1}
+  if [[ $(git ${2:+-C} ${2} log --oneline ${1} 2>/dev/null | wc -l | cut -d' ' -f1) == 0 ]]; then
+    _commit_msg_prefix="add"
+  else
+    _commit_msg_prefix="update"
+  fi
+  if [[ $(git ${2:+-C} ${2} diff --cached ${1} | head -1) == '' ]]; then
+    echo "'${1}' not changed, skip commit."
+  else
+    _do git ${2:+-C} ${2} commit -m "${1#./}: ${_commit_msg_prefix} ${_VERSION}"
+  fi
+}
+
+# save original go.sum and go.mod
+_TMPDIR=$(mktemp -d)
+_do cp -a go.sum go.mod ${_TMPDIR}/
+_do pushd ${_TMPDIR}
+_do git init . 2>/dev/null
+_do git add go.*
+_do git commit -m test
+_do popd
+
 if [[ -n ${_EXTRA_SCRIPT_EARLY} ]]; then
   for _script in "${_EXTRA_SCRIPT_EARLY[@]}"; do
     _run_script "${_script}"
@@ -350,6 +379,13 @@ _do go mod tidy ${_VERBOSE:+-v} ${_GO_VER:+-go} ${_GO_VER}
 [[ ! -d ${_VENDOR} ]] || _do rm -rf ${_VENDOR}
 _do go mod vendor ${_VERBOSE:+-v} ${_VCS_DIR:+-o} ${_VCS_DIR:+${_VENDOR}}
 
+# get go.sum and go.mod patch
+_do cp -a go.sum go.mod ${_TMPDIR}/
+git -C ${_TMPDIR} diff go.mod go.sum >${_VCS_DIR}/go-mod-sum.diff
+[[ -n ${_VERSION} ]] && \
+  _git_commit ./go-mod-sum.diff ${_VCS_DIR}
+_do rm -rf ${_TMPDIR}
+
 if [[ -n ${_EXTRA_SCRIPT} ]]; then
   for _script in "${_EXTRA_SCRIPT[@]}"; do
     _run_script "${_script}"
@@ -359,17 +395,7 @@ fi
 [[ -n ${_VERSION} ]] || exit 0
 
 _do pushd "${_VCS_DIR}"
-_do git add ./vendor
-if [[ $(git log --oneline ./vendor 2>/dev/null | wc -l | cut -d' ' -f1) == 0 ]]; then
-  _commit_msg_prefix="add"
-else
-  _commit_msg_prefix="update"
-fi
-if [[ $(git diff --cached ./vendor | head -1) == '' ]]; then
-  echo "no vendor changed, skip git vendor commit."
-else
-  _do git commit -m "vendor: ${_commit_msg_prefix} ${_VERSION}"
-fi
+_git_commit ./vendor
 
 if [[ -n ${_BRANCH_NAME} ]]; then
   _VERSION="vendor-${_BRANCH_NAME}-${_VERSION}"
