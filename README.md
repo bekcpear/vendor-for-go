@@ -6,9 +6,15 @@ refer to: https://github.com/bekcpear/ryans-repos/issues/4
   run `./gen.sh -h` for help.
 
 Due to the vendor-tarball is not supported by official go-module.eclass,
-you need do two extra works by yourself.
+here are 3 extra works need to do by yourself.
 
-1. mv `vendor` dir to `${S}` path.
+1. add tarball URL to the `SRC_URI` variable.
+   e.g.:
+   ```bash
+   SRC_URI="...
+     https://github.com/xxx/xxx-vendor/archive/refs/tags/v${PV}.tar.gz -> ${P}-vendor.tar.gz"
+   ```
+2. mv `vendor` dir to `${S}` path.
    e.g.:
    ```bash
    src_prepare() {
@@ -16,7 +22,7 @@ you need do two extra works by yourself.
      default
    }
    ```
-2. add the `-mod vendor` argument to `go` cmd when build/install, to skip download modules from network.
+3. add the `-mod vendor` argument to `go` cmd when build/install, to skip download modules from network.
    e.g.:
    ```bash
    ego -mod vendor ...
