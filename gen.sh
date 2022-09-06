@@ -1,4 +1,4 @@
-#!/usr/bin/env
+#!/usr/bin/env bash
 #
 # @author: cwittlut <i@bitbili.net>
 #
