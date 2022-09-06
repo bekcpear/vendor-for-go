@@ -217,7 +217,7 @@ fi
 _is_vcs "${_VCS_DIR}"
 # prepare push args
 _REMOTE_REPO=
-_REMOTE_REF=
+_PUSH_REF=
 if [[ -n ${_PUSH} ]]; then
   set -- ${_PUSH_ARGS}
   _PUSH_ARGS=''
@@ -235,7 +235,7 @@ if [[ -n ${_PUSH} ]]; then
         if [[ -z ${_REMOTE_REPO} ]]; then
           _REMOTE_REPO=${1}
         elif [[ -n ${1} ]]; then
-          _REMOTE_REF=${1}
+          _PUSH_REF=${1}
         fi
         ;;
     esac
@@ -284,7 +284,7 @@ if [[ -n ${_VERSION} ]]; then
   echo "  ${_ACT_IDX}. make/update tag with version '${_VERSION}'"
   _ACT_IDX+=1
   if [[ -n ${_PUSH} ]]; then
-    echo "  ${_ACT_IDX}. push with args '${_PUSH_ARGS# } ${_REMOTE_REPO} ${_REMOTE_REF}'"
+    echo "  ${_ACT_IDX}. push with args '${_PUSH_ARGS# } ${_REMOTE_REPO} ${_PUSH_REF}'"
     _ACT_IDX+=1
   fi
 fi
@@ -416,7 +416,7 @@ _do git tag -a "${_VERSION}" -m "${_VERSION}"
 
 [[ -n ${_PUSH} ]] || exit 0
 
-_do git push ${_PUSH_ARGS} ${_REMOTE_REPO} ${_REMOTE_REF}
+_do git push ${_PUSH_ARGS} ${_REMOTE_REPO} ${_PUSH_REF}
 if [[ -n ${_TAG_UPDATED} ]]; then
-  _do git push ${_PUSH_ARGS} --tags --force ${_REMOTE_REPO} ${_REMOTE_REF}
+  _do git push ${_PUSH_ARGS} --tags --force ${_REMOTE_REPO}
 fi
