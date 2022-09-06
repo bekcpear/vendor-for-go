@@ -225,10 +225,13 @@ fi
 echo " 1. remove '${_VENDOR}' directory
  2. re-generate it"
 if [[ -n ${_VERSION} ]]; then
-  echo " 3. make tag with version '${_VERSION}'"
+  echo " 3. make/update tag with version '${_VERSION}'"
   if [[ -n ${_PUSH} ]]; then
     echo " 4. push with args '${_PUSH_ARGS# } ${_REMOTE_REPO} ${_REMOTE_REF}'"
   fi
+fi
+if [[ -n ${_USE_BRANCH} ]]; then
+  echo " 5. checkout back to the previous branch if exists"
 fi
 echo
 _WAIT=3
@@ -244,6 +247,16 @@ echo -e "\033[0m"
 ## check branch
 if [[ -n ${_USE_BRANCH} ]]; then
   _do pushd "${_VCS_DIR}"
+  _BRANCH_OLD=$(git branch --show-current)
+  trap '
+  if [[ ! "$(git branch --list ${_BRANCH_OLD})" =~ ^\*|^$ ]]; then
+    _do git checkout ${_BRANCH_OLD}
+  fi
+  if [[ "$(git stash list)" != "" ]]; then
+    _do git stash pop
+  fi
+  ' EXIT
+  _do git stash push || true
   if [[ $(git branch --list ${_BRANCH_NAME}) == '' ]]; then
     _do git checkout --orphan ${_BRANCH_NAME}
     _do git rm -rf . || true
@@ -260,9 +273,7 @@ _do go mod tidy ${_VERBOSE:+-v} ${_GO_VER:+-go} ${_GO_VER}
 [[ ! -d ${_VENDOR} ]] || _do rm -rf ${_VENDOR}
 _do go mod vendor ${_VERBOSE:+-v} ${_VCS_DIR:+-o} ${_VCS_DIR:+${_VENDOR}}
 
-if [[ -z ${_VERSION} ]]; then
-  exit
-fi
+[[ -n ${_VERSION} ]] || exit 0
 
 _do pushd "${_VCS_DIR}"
 _do git add ./vendor
@@ -281,8 +292,11 @@ if [[ -n ${_BRANCH_NAME} ]]; then
 else
   _VERSION="v${_VERSION#v}"
 fi
+if [[ $(git tag --list ${_VERSION}) != '' ]]; then
+  _do git tag -d "${_VERSION}"
+fi
 _do git tag -a "${_VERSION}" -m "${_VERSION}"
 
-[[ -n ${_PUSH} ]] || exit
+[[ -n ${_PUSH} ]] || exit 0
 
 _do git push ${_PUSH_ARGS} ${_REMOTE_REPO} ${_REMOTE_REF}
