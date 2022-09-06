@@ -29,6 +29,9 @@ Usage: $(basename $0) [<PKG-DIR> [<PKG-VERSION>]] [<OPTS>...]
                        can be specified multiple times
                        You need to commit files other than 'vendor' folder in this script
     -y                The following script specified by '-x' will be executed before vendor generated
+    -z[<tool>]        Make a tarball instead of VCS tag,
+                       the default compression tool is 'xz', you can also specify one
+                       [bzip2,gzip,xz,zstd,others?]
     -g  <ver>         Update the go directive to the indicated version
     -v                Verbose output
 
@@ -51,7 +54,7 @@ if [[ ${?} != 4 ]]; then
   echo "The command 'getopt' of Linux version is necessory to parse parameters." >&2
   exit 1
 fi
-_ARGS=$(getopt -o 'g:p:x:u::b::Pyv' -- "$@")
+_ARGS=$(getopt -o 'g:p:x:u::b::z::Pyv' -- "$@")
 if [[ ${?} != 0 ]]; then
   _help
   exit 1
@@ -65,7 +68,6 @@ while :; do
     -g)
       shift
       _GO_VER="${1}"
-      shift
       ;;
     -p)
       shift
@@ -74,7 +76,6 @@ while :; do
         exit 1
       fi
       _VCS_DIR="$(realpath ${1})"
-      shift
       ;;
     -b)
       if [[ -n ${_AUTOGEN} ]]; then
@@ -84,20 +85,17 @@ while :; do
       _USE_BRANCH=1
       shift
       _BRANCH_NAME="${1}"
-      shift
       ;;
     -u)
       _PUSH="1"
       shift
       _PUSH_ARGS+=" ${1}"
-      shift
       ;;
     -P)
       if [[ -n ${_USE_BRANCH} ]]; then
         echo "'-P' conflicts with '-b'" >&2
         exit 1
       fi
-      shift
       _AUTOGEN=1
       ;;
     -x)
@@ -112,14 +110,16 @@ while :; do
       else
         _EXTRA_SCRIPT+=("$(realpath ${1})")
       fi
-      shift
       ;;
     -y)
-      shift
       _EARLY_SCRIPT=1
       ;;
-    -v)
+    -z)
       shift
+      _TARBALL=1
+      _COMPRESSION=${1:-xz}
+      ;;
+    -v)
       _VERBOSE=1
       ;;
     --)
@@ -127,10 +127,12 @@ while :; do
       break
       ;;
   esac
+  shift
 done
 
 _MOD_DIR="${1}"
 _VERSION="${2}"
+[[ -z ${_VERSION} ]] || _VCS=1
 
 _O_REDIRECT="/dev/null"
 if [[ -n ${_VERBOSE} ]]; then
@@ -180,7 +182,7 @@ _is_dir() {
 # for git only
 # $1: git repo path
 _is_vcs() {
-  if [[ -z ${_VERSION} && -z ${_USE_BRANCH} ]]; then
+  if [[ -z ${_VCS} && -z ${_USE_BRANCH} ]]; then
     # ignore this check when _VERSION and _USE_BRANCH are all unset
     return 0
   fi
@@ -201,14 +203,21 @@ if [[ -z ${_VCS_DIR} || \
   if [[ -n ${_VCS_DIR} ]]; then
     echo "the specified VCS dir is intersected with PKG dir, do as VCS path omitted" >&2
   fi
-  unset _VCS_DIR _AUTOGEN _VERSION _USE_BRANCH _PUSH _EXTRA_SCRIPT _EXTRA_SCRIPT_EARLY
+  unset _VCS_DIR _AUTOGEN _VCS _USE_BRANCH _PUSH _EXTRA_SCRIPT _EXTRA_SCRIPT_EARLY _TARBALL
 else
   _is_dir "${_VCS_DIR}"
 fi
 
+if [[ -n ${_TARBALL} ]]; then
+  unset _VCS _USE_BRANCH
+fi
+
 # prepare VCS path or branch name
-if [[ -n ${_AUTOGEN} ]]; then
-  _VCS_DIR="${_VCS_DIR%/}/vendor-$(_base_mod_path)"
+if [[ -n ${_AUTOGEN} || -n ${_TARBALL} ]]; then
+  _VCS_DIR="${_VCS_DIR%/}/$(_base_mod_path)-vendor"
+  if [[ -n ${_TARBALL} && -n ${_VERSION} ]]; then
+    _VCS_DIR="${_VCS_DIR}-${_VERSION}"
+  fi
   [[ -d "${_VCS_DIR}" ]] || _do mkdir -p "${_VCS_DIR}"
 elif [[ -n ${_USE_BRANCH} ]]; then
   _BRANCH_NAME=${_BRANCH_NAME:-$(_base_mod_path)}
@@ -264,7 +273,7 @@ if [[ -n ${_USE_BRANCH} ]]; then
 fi
 echo "  ${_ACT_IDX}. remove '${_VENDOR}' directory"
 _ACT_IDX+=1
-if [[ -n ${_VERSION} ]]; then
+if [[ -n ${_VCS} ]]; then
   if [[ -n ${_EXTRA_SCRIPT_EARLY} ]]; then
     echo "  ${_ACT_IDX}. run '${_EXTRA_SCRIPT_EARLY[@]}'"
     _ACT_IDX+=1
@@ -276,7 +285,11 @@ echo "  ${_ACT_IDX}. re-generate vendor"
 _ACT_IDX+=1
 echo "  ${_ACT_IDX}. make diff patch for go.mod and go.sum"
 _ACT_IDX+=1
-if [[ -n ${_VERSION} ]]; then
+if [[ -n ${_TARBALL} ]]; then
+  echo "  ${_ACT_IDX}. make a tarball and compress with '${_COMPRESSION}'"
+  _ACT_IDX+=1
+fi
+if [[ -n ${_VCS} ]]; then
   if [[ -n ${_EXTRA_SCRIPT} ]]; then
     echo "  ${_ACT_IDX}. run '${_EXTRA_SCRIPT[@]}'"
     _ACT_IDX+=1
@@ -382,7 +395,7 @@ _do go mod vendor ${_VERBOSE:+-v} ${_VCS_DIR:+-o} ${_VCS_DIR:+${_VENDOR}}
 # get go.sum and go.mod patch
 _do cp -a go.sum go.mod ${_TMPDIR}/
 git -C ${_TMPDIR} diff go.mod go.sum >${_VCS_DIR}/go-mod-sum.diff
-[[ -n ${_VERSION} ]] && \
+[[ -n ${_VCS} ]] && \
   _git_commit ./go-mod-sum.diff ${_VCS_DIR}
 _do rm -rf ${_TMPDIR}
 
@@ -392,7 +405,16 @@ if [[ -n ${_EXTRA_SCRIPT} ]]; then
   done
 fi
 
-[[ -n ${_VERSION} ]] || exit 0
+if [[ -n ${_TARBALL} ]]; then
+  _do pushd "${_VCS_DIR}/.."
+  _do tar -cf "${_VCS_DIR##*/}.tar" "${_VCS_DIR##*/}"
+  _do ${_COMPRESSION} "${_VCS_DIR##*/}.tar"
+  _do rm -f "${_VCS_DIR}.tar"
+  echo "here is your tarball:
+    $(ls -1 ${_VCS_DIR}.tar.*)"
+fi
+
+[[ -n ${_VCS} ]] || exit 0
 
 _do pushd "${_VCS_DIR}"
 _git_commit ./vendor
