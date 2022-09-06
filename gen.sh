@@ -394,7 +394,7 @@ _do go mod vendor ${_VERBOSE:+-v} ${_VCS_DIR:+-o} ${_VCS_DIR:+${_VENDOR}}
 
 # get go.sum and go.mod patch
 _do cp -a go.sum go.mod ${_TMPDIR}/
-git -C ${_TMPDIR} diff go.mod go.sum >${_VCS_DIR}/go-mod-sum.diff
+git -C ${_TMPDIR} diff go.mod go.sum >${_VCS_DIR}${_VCS_DIR:+/}go-mod-sum.diff
 [[ -n ${_VCS} ]] && \
   _git_commit ./go-mod-sum.diff ${_VCS_DIR}
 _do rm -rf ${_TMPDIR}
