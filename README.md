@@ -18,7 +18,12 @@ here are 3 extra works need to do by yourself.
    e.g.:
    ```bash
    src_prepare() {
-     mv ../${PN}-vendor-${PV}/vendor ./ || die
+     mv ../${PN}-vendor-${PV}/* ./ || die
+     # Due to this script always make a go mod tidy,
+     # if the pkg not make a go mod tidy when it is packaged,
+     # a conflict occurs.
+     # For a tidy package, the go-mod-sum.diff file should be empty.
+     eapply go-mod-sum.diff
      default
    }
    ```
