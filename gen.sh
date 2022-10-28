@@ -146,7 +146,7 @@ _do() {
 }
 
 _is_in_mod() {
-  if ! go list >${_O_REDIRECT}; then
+  if [[ $(go list -m) == "command-line-arguments" ]]; then
     echo "'${_MOD_DIR}' is not a module folder." >&2
     exit 1
   fi
