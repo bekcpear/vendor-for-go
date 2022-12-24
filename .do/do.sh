@@ -15,7 +15,8 @@ _THIS_PATH=$(dirname $(realpath $0))
 
 _VCS_DIR=${1}
 _PKG_NAME=${2%/*}
-_PKG_SUBDIR=${2#*/}
+_PKG_SUBDIR=${2#${_PKG_NAME}}
+_PKG_SUBDIR=${_PKG_SUBDIR#/}
 _MOD_VER=${3}
 
 if [[ -z ${_PKG_PATH} ]]; then
