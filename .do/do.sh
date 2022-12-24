@@ -18,14 +18,16 @@ _PKG_NAME=${2%/*}
 _PKG_SUBDIR=${2#*/}
 _MOD_VER=${3}
 
-_PKG_PATH=$(ls -1 ${_FIND_PATH%/}/${_PKG_NAME}-${_MOD_VER}.tar.*)
-[[ -z ${_PKG_PATH} ]] && \
-  _PKG_PATH=$(ls -1 ${_FIND_PATH%/}/${_PKG_NAME}-${_MOD_VER//-/_}.tar.*)
-[[ -z ${_PKG_PATH} ]] && \
-  {
-    echo "cannot find pkg tarball for '${_PKG_NAME}'" >&2
-    exit 1
-  }
+if [[ -z ${_PKG_PATH} ]]; then
+  _PKG_PATH=$(ls -1 ${_FIND_PATH%/}/${_PKG_NAME}-${_MOD_VER}.tar.*)
+  [[ -z ${_PKG_PATH} ]] && \
+    _PKG_PATH=$(ls -1 ${_FIND_PATH%/}/${_PKG_NAME}-${_MOD_VER//-/_}.tar.*)
+  [[ -z ${_PKG_PATH} ]] && \
+    {
+      echo "cannot find pkg tarball for '${_PKG_NAME}'" >&2
+      exit 1
+    }
+fi
 
 set -e
 _TMPDIR=$(mktemp -d)
