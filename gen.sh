@@ -349,6 +349,7 @@ _run_script() {
   export MOD_DIR=${_MOD_DIR}
   export VCS_DIR=${_VCS_DIR}
   export GOPATH=${GOPATH:-$(go env | grep '^GOPATH=' | cut -d'"' -f2)}
+  export PATH="${PATH}:${GOPATH}/bin"
   set +e
   "${1}"
   ) || true
