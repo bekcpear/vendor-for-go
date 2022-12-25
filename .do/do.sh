@@ -38,7 +38,7 @@ _MOD_DIR="$(ls -1d ${_TMPDIR}/*)${_PKG_SUBDIR:+/}${_PKG_SUBDIR}"
 _PKG_ARGS=$(cat ${_THIS_PATH}/${_PKG_NAME}/ARGS 2>/dev/null || true)
 _PKG_ARGS=${_PKG_ARGS//%MYDIR%/${_THIS_PATH}/${_PKG_NAME}}
 
-eval "${_THIS_PATH}/../gen.sh -b${_PKG_NAME} -u ${_PKG_ARGS} -p \"${_VCS_DIR}\" \"${_MOD_DIR}\" ${_MOD_VER}"
+eval "${_THIS_PATH}/../gen.sh -b${_PKG_NAME} -u${_EXTRA_PUSH_ARGS:+"}${_EXTRA_PUSH_ARGS}${_EXTRA_PUSH_ARGS:+"} ${_PKG_ARGS} -p \"${_VCS_DIR}\" \"${_MOD_DIR}\" ${_MOD_VER}"
 
 if [[ -z ${4} ]]; then
   rm -rf "${_TMPDIR}"
