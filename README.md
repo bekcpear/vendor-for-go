@@ -20,3 +20,5 @@ Just inherit that eclass and add tarball URL to the `SRC_URI` variable.
    ```
 
 Refer to the comments within that eclass for more information.
+
+_My repo that stores vendor directories at separate branches: https://github.com/bekcpear/gopkg-vendors._
