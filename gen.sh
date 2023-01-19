@@ -388,6 +388,8 @@ if [[ -n ${_EXTRA_SCRIPT_EARLY} ]]; then
 fi
 
 # mod actions
+_do go version
+_do go env
 _do go mod verify
 _do go mod tidy ${_VERBOSE:+-v} ${_GO_VER:+-go} ${_GO_VER}
 
