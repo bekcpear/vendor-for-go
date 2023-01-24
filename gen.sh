@@ -141,7 +141,7 @@ fi
 
 _do() {
   set -- "${@}"
-  echo ">>>" "${@}"
+  echo ">>>" "${@}" >&2
   "${@}" >${_O_REDIRECT}
 }
 
@@ -391,7 +391,12 @@ fi
 _do go version
 _do go env
 _do go mod verify
-_do go mod tidy ${_VERBOSE:+-v} ${_GO_VER:+-go} ${_GO_VER}
+_do go mod tidy ${_VERBOSE:+-v} ${_GO_VER:+-go} ${_GO_VER} || {
+  echo -e "\033[33m\033[1mcompat with the go version specified in the go.mod file to tidy again ... \033[0m" >&2
+  __GOVER=$(grep '^go\s' go.mod | cut -d' ' -f2)
+  _do go mod tidy ${_VERBOSE:+-v} ${_GO_VER:+-go} ${_GO_VER} -compat ${__GOVER}
+  unset __GOVER
+}
 
 [[ ! -d ${_VENDOR} ]] || _do rm -rf ${_VENDOR}
 _do go mod vendor ${_VERBOSE:+-v} ${_VCS_DIR:+-o} ${_VCS_DIR:+${_VENDOR}}
