@@ -1,0 +1,1 @@
+-y -x %MYDIR%/generate-version-txt.sh
